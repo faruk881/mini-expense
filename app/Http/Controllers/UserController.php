@@ -21,7 +21,12 @@ class UserController
         //     'message' => 'All users loaded'
         // ]);
 
-        return UsersResource::collection($user);
+        return response()->json([
+            'status' => "success",
+            'message' => "users loaded",
+            'data' => UsersResource::collection($user)
+        ]);
+
     }
 
     /**

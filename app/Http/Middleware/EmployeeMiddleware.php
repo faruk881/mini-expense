@@ -6,7 +6,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class ManagerMiddleware
+class EmployeeMiddleware
 {
     /**
      * Handle an incoming request.
@@ -15,10 +15,10 @@ class ManagerMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (! auth()->check() || auth()->user()->role !== 'manager') {
+        if (! auth()->check() || auth()->user()->role !== 'user') {
             return response()->json([
-                'status' => 'error',
-                'message' => 'Unauthorized. Managers only.'
+                'status' => 'Error',
+                'message' => 'Unauthorized. Registred users only.'
             ], 403);
         }
         return $next($request);
