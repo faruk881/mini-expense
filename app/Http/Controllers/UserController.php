@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\UsersResource;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -13,9 +14,14 @@ class UserController
      */
     public function index()
     {
-        return response()->json([
-            'message' => 'from index'
-        ]);
+        $user = User::all();
+
+        // return response()->json([
+        //     'status' => 'success',
+        //     'message' => 'All users loaded'
+        // ]);
+
+        return UsersResource::collection($user);
     }
 
     /**
@@ -23,19 +29,7 @@ class UserController
      */
     public function store(Request $request)
     {
-        $userFields = $request->validate([
-            'name' => 'required|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|confirmed'
-        ]);
-        $userFields['password'] = Hash::make($userFields['password']);
-
-        User::create($userFields);
-
-        return response()->json([
-            'status' => 'success',
-            'message' => 'New user created. Please wait for approval.'
-        ]);
+        
     }
 
     /**
