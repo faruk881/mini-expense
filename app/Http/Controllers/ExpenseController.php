@@ -2,79 +2,70 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
+use App\Http\Requests\ApproveExpenseRequest;
+use App\Http\Requests\StoreExpenseRequest;
+use App\Http\Requests\ViewExpenseRequest;
 use App\Http\Resources\ExpenseResource;
 use App\Models\Expense;
+use Exception;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Controller;
 
-class ExpenseController
+class ExpenseController extends Controller
 {
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(ViewExpenseRequest $request)
     {
-        // Validate filters
-        $request->validate([
-            'status'   => 'nullable|in:pending,approved,rejected',
-            'category' => 'nullable|exists:expense_categories,slug',
-        ]);
+       try{
+            $user = $request->user();
 
-        $user = $request->user(); // Sanctum-safe
+            $query = Expense::query();
 
-        $query = Expense::query();
+            if ($user->role === 'employee') {
+                $query->where('user_id', $user->id);
+            }
+            if ($request->filled('status')) {
+                $query->status($request->status);
+            }
 
-        // Employee → only own expenses
-        if ($user->role === 'employee') {
-            $query->where('user_id', $user->id);
+            if ($request->filled('category')) {
+                $query->category($request->category);
+            }
+
+            $expenses = $query->latest()->get();
+
+            if ($expenses->isEmpty()) {
+                return ApiResponse::error('No records found',404);
+            }
+
+            return ApiResponse::success('Expenses fatched successfully',ExpenseResource::collection($expenses),200);
+        
+        }catch(\Exception $e){
+            return ApiResponse::error($e->getMessage(),500);
         }
-
-        // Apply filters
-        if ($request->filled('status')) {
-            $query->status($request->status);
-        }
-
-        if ($request->filled('category')) {
-            $query->category($request->category);
-        }
-
-        $expenses = $query->latest()->get();
-        //return error
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Expenses fetched successfully',
-            'data'    => ExpenseResource::collection($expenses),
-        ]);
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(StoreExpenseRequest $request)
     {
-        $data = $request->validate([
-            'expense_category_id' => 'required|exists:expense_categories,id',
-            'amount' => 'required|numeric|min:0.01',
-            'description' => 'nullable|string|max:1000',
-            'image_url' => 'required|image|mimes:jpg,jpeg,png|max:2048',
-        ]);
+        try{
+            $path = $request->file('image_url')->store('receipts', 'public'); // store the image in publicaly
+            $data = $request->validated();
+            $data['user_id'] = auth()->id();
+            $data['status'] = 'pending';
+            $data['image_url'] = $path;
+            $expense = Expense::create($data);
 
-        // Store image 
-        $path = $request->file('image_url')->store('receipts', 'local');
+            return ApiResponse::success('Expense submitted successfully', new ExpenseResource($expense));
+        } catch(\Throwable $e){
+            return ApiResponse::error($e->getMessage());
+        }
 
-        $expense = Expense::create([
-            'user_id' => auth()->id(),
-            'expense_category_id' => $data['expense_category_id'],
-            'amount' => $data['amount'],
-            'description' => $data['description'] ?? null,
-            'image_url' => $path,
-            'status' => 'pending',
-        ]);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Expense submitted successfully',
-            'data'    => $expense,
-        ], 201);
     }
 
     /**
@@ -88,53 +79,39 @@ class ExpenseController
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(ApproveExpenseRequest $request, Expense $expense)
     {
-        // Validate input
-        $request->validate([
-            'status'  => 'required|in:approved,rejected',
-            'remarks' => 'required_if:status,rejected|string|max:500',
-        ]);
 
-        $manager = $request->user();
-        $expense = Expense::find($id);
+        try{
+            $manager = $request->user();
+            // Manager cannot approve/reject own expense
+            if ($expense->user_id === $manager->id) {
+                return ApiResponse::error('You cannot approve or reject your own expense',403);
+            }
 
-        // Manager cannot approve/reject own expense
-        if ($expense->user_id === $manager->id) {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'You cannot approve or reject your own expense',
-            ], 403);
-        }
+            if(auth()->user()->role === 'employee') {
+                return ApiResponse::error('Only manager can approve expense',403);
+            }
 
-        if(auth()->user()->role === 'employee') {
-            return response()->json([
-                'status' => 'error',
-                'message' => 'Only manager can approve expense'
+            // Prevent re-processing
+            if ($expense->status !== 'pending') {
+                return ApiResponse::error('Expense has already been processed',422);
+            }
+
+            // Update expense
+            $expense->update([
+                'status'  => $request->status,
+                'remarks' => $request->status === 'rejected'
+                    ? $request->remarks
+                    : null,
             ]);
+
+            return ApiResponse::error("Expense {$request->status} successfully", new ExpenseResource($expense));
+
+        } catch(\Throwable $e){
+            return ApiResponse::error($e->getMessage());
         }
-
-        // Prevent re-processing
-        if ($expense->status !== 'pending') {
-            return response()->json([
-                'status'  => 'error',
-                'message' => 'Expense has already been processed',
-            ], 422);
-        }
-
-        // Update expense
-        $expense->update([
-            'status'  => $request->status,
-            'remarks' => $request->status === 'rejected'
-                ? $request->remarks
-                : null,
-        ]);
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => "Expense {$request->status} successfully",
-            'data'    => new ExpenseResource($expense),
-        ]);
+        
     }
 
 

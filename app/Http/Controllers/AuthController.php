@@ -2,52 +2,53 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\ApiResponse;
+use App\Http\Requests\UserLoginRequest;
+use App\Http\Requests\UserRegisterRequest;
+use App\Http\Resources\UsersResource;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController
 {
-    public function register(Request $request) {
-        $userFields = $request->validate([
-            'name' => 'required|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|confirmed'
-        ]);
-        $userFields['password'] = Hash::make($userFields['password']);
+    public function register(UserRegisterRequest $request) {
+        try{
+            $userFields = $request->validated();
+            $userFields['password'] = Hash::make($userFields['password']);
 
-        User::create($userFields);
+            $user = User::create($userFields);
 
-        return response()->json([
-            'status' => 'success',
-            'message' => 'New user created.'
-        ]);
-    }
-
-    public function login(Request $request){
-
-        $request->validate([
-            'email' => 'required|email|exists:users',
-            'password' => 'required'
-        ]);
-
-        $user = User::where('email',$request->email)->first();
-
-        if(!$user || !Hash::check($request->password,
-        $user->password)) {
-            return response()->json([
-                'message' => "invalid credentials",
-
-            ]);
+            return ApiResponse::success('New user created',new UsersResource($user));
+        } catch(\Throwable $e) {
+            return ApiResponse::error($e->getMessage());
+            // return $this->error($e->getMessage());
         }
 
-        $token = $user->createToken($user->name);
+    }
 
-        return response()->json([
-            'status' => 'Success',
-            'message' => 'User Logged In',
-            'user' => $user,
-            'token' => $token->plainTextToken
-        ]);
+    public function login(UserLoginRequest $request){
+        try{
+            $user = User::where('email',$request->email)->first();
+
+            if(!$user || !Hash::check($request->password,
+            $user->password)) {
+                return ApiResponse::error('Invalid credentials');
+            }
+
+            $token = $user->createToken($user->name);
+
+            return response()->json([
+                'status' => 'Success',
+                'message' => 'User Logged In',
+                'user' => $user,
+                'token' => $token->plainTextToken
+            ]);
+
+        } catch (\Throwable $e) {
+            return ApiResponse::error($e->getMessage());
+        }
+
+        
     }
 }
