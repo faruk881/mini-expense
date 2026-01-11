@@ -38,7 +38,7 @@ class ExpenseController
         }
 
         $expenses = $query->latest()->get();
-
+        //return error
         return response()->json([
             'status'  => 'success',
             'message' => 'Expenses fetched successfully',
@@ -90,8 +90,53 @@ class ExpenseController
      */
     public function update(Request $request, string $id)
     {
-        //
+        // Validate input
+        $request->validate([
+            'status'  => 'required|in:approved,rejected',
+            'remarks' => 'required_if:status,rejected|string|max:500',
+        ]);
+
+        $manager = $request->user();
+        $expense = Expense::find($id);
+
+        // Manager cannot approve/reject own expense
+        if ($expense->user_id === $manager->id) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'You cannot approve or reject your own expense',
+            ], 403);
+        }
+
+        if(auth()->user()->role === 'employee') {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Only manager can approve expense'
+            ]);
+        }
+
+        // Prevent re-processing
+        if ($expense->status !== 'pending') {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Expense has already been processed',
+            ], 422);
+        }
+
+        // Update expense
+        $expense->update([
+            'status'  => $request->status,
+            'remarks' => $request->status === 'rejected'
+                ? $request->remarks
+                : null,
+        ]);
+
+        return response()->json([
+            'status'  => 'success',
+            'message' => "Expense {$request->status} successfully",
+            'data'    => new ExpenseResource($expense),
+        ]);
     }
+
 
     /**
      * Remove the specified resource from storage.
