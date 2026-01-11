@@ -21,7 +21,7 @@ class ExpenseController extends Controller
     {
        try{
             $user = $request->user();
-
+            $perPage = $request->input('per_page', 10);
             $query = Expense::query();
 
             if ($user->role === 'employee') {
@@ -35,13 +35,13 @@ class ExpenseController extends Controller
                 $query->category($request->category);
             }
 
-            $expenses = $query->latest()->get();
+            $expenses = $query->latest()->paginate($perPage);
 
             if ($expenses->isEmpty()) {
                 return ApiResponse::error('No records found',404);
             }
 
-            return ApiResponse::success('Expenses fatched successfully',ExpenseResource::collection($expenses),200);
+            return ExpenseResource::collection($expenses);
         
         }catch(\Exception $e){
             return ApiResponse::error($e->getMessage(),500);

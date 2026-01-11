@@ -11,8 +11,11 @@ class ExpenseCategoryController
 {
     public function viewCategory(){
         try{
-            $categories = ExpenseCategory::all();
-            return ApiResponse::success('All expense category loaded',ExpenseCategoryResource::collection($categories));
+            $categories = ExpenseCategory::paginate(10);
+            return ExpenseCategoryResource::collection($categories)->additional([
+                'status' => true,
+                'message'=> "Category retrive successfully."
+            ]);
         } catch (\Throwable $e) {
             return ApiResponse::error($e->getmessage());
         }
